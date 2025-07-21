@@ -4,8 +4,9 @@ import numpy as np
 from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass
 
-# Import the vulnerable RSA implementation
-from rsa import VulnerableRSA, RSAPublicKey, RSAPrivateKey
+# Import the vulnerable RSA implementation and key generation
+from rsa import VulnerableRSA
+from rsa_key_generator import RSAKeyGenerator, RSAPublicKey, RSAPrivateKey
 
 
 
@@ -29,9 +30,12 @@ class AttackEnvironment:
         self.sleep_duration = sleep_duration
         self.num_traces = num_traces
 
-        self.rsa_instance = VulnerableRSA.generate_keypair(
-            key_length=self.key_length,
-            sleep_duration=self.sleep_duration
+        # Generate RSA key pair using the new key generator
+        key_pair = RSAKeyGenerator.generate_keypair(key_length)
+        self.rsa_instance = VulnerableRSA(
+            public_key=key_pair.public_key,
+            private_key=key_pair.private_key,
+            sleep_duration=sleep_duration
         )
         self.timing_samples: List[TimingSample] = self._collect_timing_samples()
 
@@ -217,7 +221,7 @@ def main():
     """
     # Attack parameters
     KEY_LENGTH = 64
-    SLEEP_DURATION = 0 #0.00005  # 50 microseconds
+    SLEEP_DURATION = 0.00005 #0.00005  # 50 microseconds
     NUM_TRACES = 10000
     GLOBAL_SEED = 42
     #random.seed(GLOBAL_SEED)

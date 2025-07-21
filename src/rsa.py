@@ -1,79 +1,27 @@
 # WARNING: This is a naive and unsafe RSA implementation for educational purposes only.
 # NEVER use it in production cryptographic applications.
 
-import random
 import time
-import math
-from dataclasses import dataclass
+from abc import ABC, abstractmethod
+from rsa_key_generator import RSAPublicKey, RSAPrivateKey
 
 
-class PrimeGenerator:
+class RSAInterface(ABC):
     """
-    A simple prime number generator using Miller-Rabin primality test for probabilistic prime checking.
+    Abstract base class defining the standard interface for RSA implementations.
     """
-    @staticmethod
-    def _is_prime(n: int, iterations: int = 10) -> bool:
-        """
-        Miller-Rabin probabilistic primality test.
-
-        Args:
-            n: The number to test for primality
-            iterations: Number of iterations to perform (higher = more accurate)
-
-        Returns:
-            True if n is probably prime, False if n is definitely composite
-        """
-
-        # Handle trivial cases
-        if n < 2: return False
-        if n in (2, 3): return True
-        if n % 2 == 0: return False
-
-        # Write n-1 as d * 2^r where d is odd
-        r, d = 0, n - 1
-        while d % 2 == 0:
-            r += 1
-            d //= 2
-
-        # Perform Miller-Rabin test iterations
-        for _ in range(iterations):
-            a = random.randrange(2, n - 1)
-            x = pow(a, d, n)
-            if x == 1 or x == n - 1:
-                continue
-
-            # Square x repeatedly r-1 times
-            for _ in range(r - 1):
-                x = pow(x, 2, n)
-                if x == n - 1: break
-            else:
-                # If we never found x == n-1, n is composite
-                return False
-        return True
-
-    @staticmethod
-    def generate_prime(bits: int, max_attempts: int = 10000) -> int:
-        """
-        Generate a random prime number with exactly the specified bit length.
-
-        Args:
-            bits: The desired bit length of the prime
-            max_attempts: Maximum number of candidates to try
-
-        Returns:
-            A prime number with exactly 'bits' bits
-
-        Raises:
-            RuntimeError: If no prime found within max_attempts
-        """
-
-        for _ in range(max_attempts):
-            # Generate random number with exact bit length
-            # Set MSB to 1 (ensures exact bit length) and LSB to 1 (ensures odd)
-            p = random.getrandbits(bits) | (1 << bits - 1) | 1
-            if PrimeGenerator._is_prime(p):
-                return p
-        raise RuntimeError(f"Unable to generate a {bits} bits prime after {max_attempts} attempts.")
+    
+    def __init__(self, public_key: 'RSAPublicKey', private_key: 'RSAPrivateKey'):
+        self.public_key = public_key
+        self.private_key = private_key
+    
+    @abstractmethod
+    def encrypt(self, message: int) -> int:
+        pass
+    
+    @abstractmethod
+    def decrypt(self, ciphertext: int) -> int:
+        pass
 
 
 class RSAModularOperations:
@@ -230,36 +178,9 @@ class RSAModularOperations:
 
 
 
-@dataclass
-class RSAPublicKey:
-    """
-    RSA public key containing the modulus and public exponent.
-
-    Attributes:
-        n: The RSA modulus (product of two primes)
-        e: The public exponent (typically 65537)
-    """
-    n: int
-    e: int
 
 
-@dataclass
-class RSAPrivateKey:
-    """
-    RSA private key containing the modulus and private exponent.
-
-    Attributes:
-        n: The RSA modulus (same as in public key)
-        d: The private exponent (multiplicative inverse of e mod φ(n))
-        p: First prime factor
-        q: Second prime factor
-    """
-    n: int
-    d: int
-    p: int
-    q: int
-
-class VulnerableRSA:
+class VulnerableRSA(RSAInterface):
     """
     Vulnerable educational RSA implementation with timing side-channel vulnerabilities.
 
@@ -269,6 +190,7 @@ class VulnerableRSA:
     """
     def __init__(self, public_key: RSAPublicKey, private_key: RSAPrivateKey, sleep_duration: float = 0.0):
         """
+
         Initialize RSA instance with given key pair.
 
         Args:
@@ -276,58 +198,8 @@ class VulnerableRSA:
             private_key: RSA private key
             sleep_duration: Time delay for side-channel demonstration
         """
-        self.public_key = public_key
-        self.private_key = private_key
+        super().__init__(public_key, private_key)
         self.sleep_duration = sleep_duration
-
-    @classmethod
-    def generate_keypair(cls, key_length: int, sleep_duration: float = 0.0) -> 'VulnerableRSA':
-        """
-        Generate a new RSA key pair with the specified bit length.
-
-        Uses the standard RSA key generation algorithm:
-        1. Generate two distinct prime numbers p and q
-        2. Compute n = p * q and φ(n) = (p-1)(q-1)
-        3. Choose public exponent e = 65537
-        4. Compute private exponent d = e^(-1) mod φ(n)
-
-        Args:
-            key_length: Desired bit length of the RSA modulus
-            sleep_duration: Time delay for side-channel demonstration
-
-        Returns:
-            VulnerableRSA instance with generated key pair
-        """
-        e = 65537                         # Standard RSA public exponent (2^16 + 1)
-        prime_length = key_length // 2    # Each prime should be half the key length
-
-        # Loop until the generated key pair respect the proper constraints
-        while True:
-            # Generate two prime numbers of equal bit length
-            p = PrimeGenerator.generate_prime(prime_length)
-            q = PrimeGenerator.generate_prime(prime_length)
-
-            # Ensure primes are distinct
-            if p == q:
-                continue
-            # Compute RSA parameters
-            n = p * q
-            phi = (p - 1) * (q - 1)  # Euler's totient function
-
-            # Verify constraints:
-            # 1. Modulus has exactly the desired bit length
-            # 2. e and φ(n) are coprime (required for d to exist)
-            if n.bit_length() == key_length and math.gcd(phi, e) == 1:
-                break
-
-        # Compute private exponent d = e^(-1) mod φ(n)
-        d = pow(e, -1, phi)
-
-        return cls(
-            RSAPublicKey(n=n, e=e),
-            RSAPrivateKey(n=n, d=d, p=p, q=q),
-            sleep_duration
-        )
 
 
     def encrypt(self, message: int) -> int:
