@@ -1,13 +1,13 @@
 import time
 import random
 import numpy as np
-from typing import List, Tuple, Dict, Optional
+from typing import List, Optional
 from dataclasses import dataclass
 
 # Import the vulnerable RSA implementation and key generation
-from rsa import VulnerableRSA
-from rsa_key_generator import RSAKeyGenerator, RSAPublicKey, RSAPrivateKey
-
+from rsa_vulnerable import VulnerableRSA
+from rsa_key_generator import RSAKeyGenerator
+from src.rsa import RSAPublicKey, RSAPrivateKey
 
 
 @dataclass

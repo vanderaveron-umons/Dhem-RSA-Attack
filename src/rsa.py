@@ -1,252 +1,213 @@
-# WARNING: This is a naive and unsafe RSA implementation for educational purposes only.
-# NEVER use it in production cryptographic applications.
-
-import time
+import base64
+import re
 from abc import ABC, abstractmethod
-from rsa_key_generator import RSAPublicKey, RSAPrivateKey
+from dataclasses import dataclass
+
+from pyasn1.codec.der import decoder, encoder
+from pyasn1.error import PyAsn1Error
+from pyasn1.type import univ, namedtype
 
 
 class RSAInterface(ABC):
     """
     Abstract base class defining the standard interface for RSA implementations.
     """
-    
+
     def __init__(self, public_key: 'RSAPublicKey', private_key: 'RSAPrivateKey'):
         self.public_key = public_key
         self.private_key = private_key
-    
+
     @abstractmethod
     def encrypt(self, message: int) -> int:
         pass
-    
+
     @abstractmethod
     def decrypt(self, ciphertext: int) -> int:
         pass
 
-
-class RSAModularOperations:
+# ========================== #
+# RSA structures and helpers #
+# ========================== #
+@dataclass
+class RSAPublicKey:
     """
-    RSA modular operations using Montgomery arithmetic for efficient modular multiplication.
+    RSA public key containing the modulus and public exponent.
 
-    Includes a configurable delay in the extra reduction step in the Montgomery multiplication
-    in order to increase the timing effect for a side-channel attack demonstration.
+    Attributes:
+        n: The RSA modulus (product of two primes)
+        e: The public exponent (typically 65537)
     """
-    class MontgomeryContext:
+    n: int
+    e: int
+
+
+@dataclass
+class RSAPrivateKey:
+    """
+    RSA private key containing the modulus and private exponent.
+
+    Attributes:
+        n: The RSA modulus (same as in public key)
+        d: The private exponent (multiplicative inverse of e mod φ(n))
+        p: First prime factor
+        q: Second prime factor
+    """
+    n: int
+    d: int
+    p: int
+    q: int
+
+
+@dataclass
+class RSAKeyPair:
+    """
+    RSA key pair containing both public and private keys.
+
+    Attributes:
+        public_key: RSA public key
+        private_key: RSA private key
+    """
+    public_key: RSAPublicKey
+    private_key: RSAPrivateKey
+
+    @classmethod
+    def from_components(cls, p: int, q: int, e: int, d: int) -> 'RSAKeyPair':
         """
-        Montgomery arithmetic context for efficient modular operations.
-
-        Montgomery arithmetic represents numbers in a special form that allows
-        efficient modular multiplication without expensive division operations.
-        """
-        def __init__(self, modulus: int, sleep_duration: float = 0.0):
-            """
-            Initialize Montgomery context for the given modulus.
-
-            Args:
-                modulus: The modulus (must be odd for Montgomery arithmetic)
-                sleep_duration: Time to sleep on extra reduction (for side-channel demo)
-
-            Raises:
-                ValueError: If modulus is even (Montgomery requires odd modulus)
-            """
-            if modulus % 2 == 0:
-                raise ValueError("Montgomery arithmetic requires an odd modulus")
-
-            self.modulus = modulus
-            self.sleep_duration = sleep_duration
-
-            # Montgomery parameters
-            self.k = modulus.bit_length() # Number of bits in modulus
-            self.R = 1 << self.k          # R = 2^k (Montgomery radix)
-
-            # Compute n' such that n * n' ≡ -1 (mod R)
-            # We use: n' = R - n^(-1) mod R
-            self.n_prime = self.R - pow(self.modulus, -1, self.R)
-
-            # Precompute R² mod n for conversions to Montgomery form
-            self.R_squared = (self.R * self.R) % self.modulus
-
-            # Montgomery representation of 1 (used as initial value)
-            self.one_mont = self.R % self.modulus
-
-        def _reduce(self, t: int) -> int:
-            """
-            Montgomery reduction: convert from extended form back to Montgomery form.
-
-            Given t in extended Montgomery form, compute t/R mod n efficiently
-            without division by using the Montgomery algorithm.
-
-            Args:
-                t: Number in extended Montgomery form
-
-            Returns:
-                t/R mod n in Montgomery form
-            """
-            # Compute m = (t mod R) * n' mod R
-            m = ((t & (self.R - 1)) * self.n_prime) & (self.R - 1)
-
-            # Compute u = (t + m*n) / R
-            u = (t + m * self.modulus) >> self.k
-
-            # Check if extra reduction is needed
-            extra_reduction = u >= self.modulus
-            if extra_reduction:
-                if self.sleep_duration > 0: # time.sleep(0) waits forever
-                    time.sleep(self.sleep_duration)
-                u -= self.modulus
-            return u
-
-        def to_mont(self, x: int) -> int:
-            """
-            Convert a regular integer to Montgomery form.
-
-            Args:
-                x: Regular integer
-
-            Returns:
-                x in Montgomery form (x * R mod n)
-            """
-            return self._reduce(x * self.R_squared)
-
-        def from_mont(self, x_mont: int) -> int:
-            """
-            Convert from Montgomery form back to regular integer.
-
-            Args:
-                x_mont: Integer in Montgomery form
-
-            Returns:
-                Regular integer (x_mont / R mod n)
-            """
-            return self._reduce(x_mont)
-
-        def multiply(self, a_mont: int, b_mont: int) -> int:
-            """
-            Multiply two numbers in Montgomery form.
-
-            Args:
-                a_mont, b_mont: Numbers in Montgomery form
-
-            Returns:
-                Product in Montgomery form
-            """
-            return self._reduce(a_mont * b_mont)
-
-    @staticmethod
-    def exponent(base: int, exp: int, modulus: int, sleep_duration: float = 0.0) -> int:
-        """
-        Modular exponentiation using the square-and-multiply algorithm and Montgomery arithmetic.
+        Creates a new RSAKeyPair from the given components (p, q, e, d).
+        WARNING: no validity check is performed.
 
         Args:
-            base: Base number
-            exp: Exponent
-            modulus: Modulus (must be odd)
-            sleep_duration: Sleep time for side-channel demonstration
+            p: First prime factor
+            q: Second prime factor
+            e: The public exponent
+            d: The private exponent
 
         Returns:
-            base^exp mod modulus
+            A new instance of RSAKeyPair.
 
         """
+        n = p * q
 
-        # Handle trivial cases
-        if exp == 0:
-            return 1
-        if exp == 1:
-            return base % modulus
+        public_key = RSAPublicKey(n=n, e=e)
+        private_key = RSAPrivateKey(n=n, d=d, p=p, q=q)
 
-        # Initialize Montgomery context
-        ctx = RSAModularOperations.MontgomeryContext(modulus, sleep_duration)
+        return cls(public_key=public_key, private_key=private_key)
 
-        # Convert base to Montgomery form
-        base_mont = ctx.to_mont(base)
+    @classmethod
+    def from_pem_private(cls, pem_data: str) -> 'RSAKeyPair':
+        """
+        Import PKCS#1 PEM private key and return an RSAKeyPair instance.
+        The private key PEM contains all necessary public key components.
+        """
+        der_data = _pem_to_der(pem_data, "RSA PRIVATE KEY")
+        try:
+            private_key_asn1, _ = decoder.decode(der_data, asn1Spec=_RSAPrivateKeyASN1())
+        except PyAsn1Error as e:
+            raise ValueError(f"Invalid ASN.1 structure for private key: {e}")
 
-        # Initialize result to 1 in Montgomery form
-        result_mont = ctx.one_mont
+        n = int(private_key_asn1.getComponentByName('modulus'))
+        e = int(private_key_asn1.getComponentByName('publicExponent'))
+        d = int(private_key_asn1.getComponentByName('privateExponent'))
+        p = int(private_key_asn1.getComponentByName('prime1'))
+        q = int(private_key_asn1.getComponentByName('prime2'))
 
-        # Square-and-multiply from MSB to LSB with "multiply-then-square" order
-        for i in range(exp.bit_length() - 1, -1, -1):
-            # 1. Conditional multiplication (if current bit is 1)
-            if (exp >> i) & 1:
-                result_mont = ctx.multiply(result_mont, base_mont)
+        public_key = RSAPublicKey(n=n, e=e)
+        private_key = RSAPrivateKey(n=n, d=d, p=p, q=q)
 
-            # 2. Squaring (always, except for the last iteration)
-            if i > 0:
-                result_mont = ctx.multiply(result_mont, result_mont)
+        return cls(public_key=public_key, private_key=private_key)
 
-        # Convert result back from Montgomery form
-        return ctx.from_mont(result_mont)
+    def export_private_pem(self) -> str:
+        """Export RSA key pair as a PKCS#1 PEM private key string."""
+        # Calculate CRT parameters needed for the standard format
+        exp1 = self.private_key.d % (self.private_key.p - 1)  # dP
+        exp2 = self.private_key.d % (self.private_key.q - 1)  # dQ
+        coeff = pow(self.private_key.q, -1, self.private_key.p)  # qInv
+
+        # Build the ASN.1 structure
+        private_key_asn1 = _RSAPrivateKeyASN1()
+        private_key_asn1.setComponentByName('version', 0)
+        private_key_asn1.setComponentByName('modulus', self.private_key.n)
+        private_key_asn1.setComponentByName('publicExponent', self.public_key.e)
+        private_key_asn1.setComponentByName('privateExponent', self.private_key.d)
+        private_key_asn1.setComponentByName('prime1', self.private_key.p)
+        private_key_asn1.setComponentByName('prime2', self.private_key.q)
+        private_key_asn1.setComponentByName('exponent1', exp1)
+        private_key_asn1.setComponentByName('exponent2', exp2)
+        private_key_asn1.setComponentByName('coefficient', coeff)
+
+        der_data = encoder.encode(private_key_asn1)
+        return _der_to_pem(der_data, "RSA PRIVATE KEY")
+
+    def export_public_pem(self) -> str:
+        """Export the public part of the key pair as a PKCS#1 PEM public key string."""
+        public_key_asn1 = _RSAPublicKeyASN1()
+        public_key_asn1.setComponentByName('modulus', self.public_key.n)
+        public_key_asn1.setComponentByName('publicExponent', self.public_key.e)
+
+        der_data = encoder.encode(public_key_asn1)
+        return _der_to_pem(der_data, "RSA PUBLIC KEY")
 
 
-
-
-
-class VulnerableRSA(RSAInterface):
+# ==================================== #
+# ASN.1 structures and PEM/DER helpers #
+# ==================================== #
+class _RSAPrivateKeyASN1(univ.Sequence):
     """
-    Vulnerable educational RSA implementation with timing side-channel vulnerabilities.
-
-    This implementation demonstrates basic RSA operations without security
-    hardening. It includes optional timing delays to simulate side-channel
-    attacks during modular exponentiation.
+    PKCS#1 RSAPrivateKey ASN.1 structure (RFC 3447).
+    This structure contains not only the private key but also the public key
+    components and parameters for CRT (Chinese Remainder Theorem) optimization.
     """
-    def __init__(self, public_key: RSAPublicKey, private_key: RSAPrivateKey, sleep_duration: float = 0.0):
-        """
-
-        Initialize RSA instance with given key pair.
-
-        Args:
-            public_key: RSA public key
-            private_key: RSA private key
-            sleep_duration: Time delay for side-channel demonstration
-        """
-        super().__init__(public_key, private_key)
-        self.sleep_duration = sleep_duration
-
-
-    def encrypt(self, message: int) -> int:
-        """
-        Encrypt a message using RSA public key. This is raw RSA without padding.
-
-        Performs raw RSA encryption: ciphertext = message^e mod n
-
-        Args:
-            message: Integer message to encrypt (must be < n)
-
-        Returns:
-            Encrypted ciphertext as integer
-        """
-        if message >= self.public_key.n:
-            raise ValueError("Message must be smaller than modulus")
-        if message < 0:
-            raise ValueError("Message must be non-negative")
-
-        return RSAModularOperations.exponent(
-            base=message,
-            exp=self.public_key.e,
-            modulus=self.public_key.n,
-            sleep_duration=self.sleep_duration
-        )
+    componentType = namedtype.NamedTypes(
+        namedtype.NamedType('version', univ.Integer()),              # Must be 0 for two-prime RSA
+        namedtype.NamedType('modulus', univ.Integer()),              # n (public)
+        namedtype.NamedType('publicExponent', univ.Integer()),       # e (public)
+        namedtype.NamedType('privateExponent', univ.Integer()),      # d (private)
+        namedtype.NamedType('prime1', univ.Integer()),               # p (private)
+        namedtype.NamedType('prime2', univ.Integer()),               # q (private)
+        # --- CRT components for faster private key operations ---
+        namedtype.NamedType('exponent1', univ.Integer()),            # d mod (p-1)
+        namedtype.NamedType('exponent2', univ.Integer()),            # d mod (q-1)
+        namedtype.NamedType('coefficient', univ.Integer()),          # (inverse of q) mod p
+    )
 
 
-    def decrypt(self, ciphertext: int) -> int:
-        """
-        Decrypt a ciphertext using RSA private key.
+class _RSAPublicKeyASN1(univ.Sequence):
+    """PKCS#1 RSAPublicKey ASN.1 structure (RFC 3447)."""
+    componentType = namedtype.NamedTypes(
+        namedtype.NamedType('modulus', univ.Integer()),              # n
+        namedtype.NamedType('publicExponent', univ.Integer()),       # e
+    )
 
-        Performs raw RSA decryption: message = ciphertext^d mod n
 
-        Args:
-            ciphertext: Integer ciphertext to decrypt (must be < n)
+def _der_to_pem(der_data: bytes, key_type: str) -> str:
+    """Convert DER (binary) data to PEM (Base64 text) format."""
+    b64_data = base64.b64encode(der_data).decode('ascii')
+    # Split into 64-character lines as per PEM standard
+    lines = [b64_data[i:i + 64] for i in range(0, len(b64_data), 64)]
+    header = f"-----BEGIN {key_type}-----"
+    footer = f"-----END {key_type}-----"
+    return '\n'.join([header] + lines + [footer])
 
-        Returns:
-            Decrypted message as integer
-        """
-        if ciphertext >= self.private_key.n:
-            raise ValueError("Ciphertext must be smaller than modulus")
-        if ciphertext < 0:
-            raise ValueError("Ciphertext must be non-negative")
 
-        return RSAModularOperations.exponent(
-            base=ciphertext,
-            exp=self.private_key.d,
-            modulus=self.private_key.n,
-            sleep_duration=self.sleep_duration
-        )
+def _pem_to_der(pem_data: str, expected_type: str) -> bytes:
+    """Convert PEM format to DER binary data, with validation."""
+    pem_data = pem_data.strip()
+    header = f"-----BEGIN {expected_type}-----"
+    footer = f"-----END {expected_type}-----"
+
+    if not (pem_data.startswith(header) and pem_data.endswith(footer)):
+        raise ValueError(f"PEM data does not have valid headers/footers for {expected_type}")
+
+    # Extract the Base64 content between the headers
+    b64_block = pem_data[len(header):-len(footer)].strip()
+
+    # Delete all spaces, including newline.
+    b64_content = re.sub(r'\s+', '', b64_block)
+
+    try:
+        # Decode the Base64 content. The 'validate=True' flag ensures that the
+        # input contains only valid Base64 characters.
+        return base64.b64decode(b64_content, validate=True)
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"Invalid Base64 encoding in PEM data: {e}")
+

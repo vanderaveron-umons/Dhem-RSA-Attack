@@ -3,7 +3,7 @@ import subprocess
 import shutil
 import re
 # Import the classes from your implementation using the new package structure
-from rsa_key_generator import RSAKeyGenerator, RSAKeyPair, RSAPublicKey
+from rsa_key_generator import RSAKeyGenerator, RSAKeyPair
 
 # Import the necessary components from the 'cryptography' library
 # You may need to install it: pip install cryptography
