@@ -7,7 +7,7 @@ from dataclasses import dataclass
 # Import the vulnerable RSA implementation and key generation
 from rsa_vulnerable import VulnerableRSA
 from rsa_key_generator import RSAKeyGenerator
-from src.rsa import RSAPublicKey, RSAPrivateKey
+from rsa import RSAPublicKey, RSAPrivateKey
 
 
 @dataclass
@@ -223,8 +223,7 @@ def main():
     KEY_LENGTH = 64
     SLEEP_DURATION = 0.00005 #0.00005  # 50 microseconds
     NUM_TRACES = 10000
-    GLOBAL_SEED = 42
-    #random.seed(GLOBAL_SEED)
+    INITIAL_SEED = 42
 
     print("Dhem Timing Attack Demonstration")
     print("=" * 50)

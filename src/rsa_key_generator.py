@@ -3,7 +3,7 @@ import math
 import argparse
 import sys
 
-from src.rsa import RSAKeyPair
+from rsa import RSAKeyPair
 
 class RSAKeyGenerator:
     """
@@ -22,9 +22,12 @@ class RSAKeyGenerator:
     """
 
     @staticmethod
-    def generate_keypair(key_length: int, public_exponent: int = 65537) -> RSAKeyPair:
+    def generate_keypair(key_length: int, public_exponent: int = 65537, seed: int = 0) -> RSAKeyPair:
         if public_exponent < 3 or public_exponent % 2 == 0:
             raise ValueError("Public exponent must be odd and >= 3")
+
+        if seed != 0:
+            random.seed(seed)
 
         e = public_exponent
         prime_length = key_length // 2

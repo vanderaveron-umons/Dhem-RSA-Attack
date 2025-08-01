@@ -2,7 +2,7 @@
 # NEVER use it in production cryptographic applications.
 
 import time
-from src.rsa import RSAInterface, RSAPublicKey, RSAPrivateKey
+from rsa import RSAInterface, RSAPublicKey, RSAPrivateKey
 
 
 class RSAModularOperations:
