@@ -2,7 +2,7 @@
 # NEVER use it in production cryptographic applications.
 
 import time
-from rsa import RSAInterface, RSAPublicKey, RSAPrivateKey
+from rsa import TimedRSAInterface, RSAPublicKey, RSAPrivateKey
 
 
 class RSAModularOperations:
@@ -161,7 +161,7 @@ class RSAModularOperations:
 
 
 
-class VulnerableRSA(RSAInterface):
+class VulnerableRSA(TimedRSAInterface):
     """
     Vulnerable educational RSA implementation with timing side-channel vulnerabilities.
 
@@ -183,7 +183,7 @@ class VulnerableRSA(RSAInterface):
         self.sleep_duration = sleep_duration
 
 
-    def encrypt(self, message: int) -> int:
+    def timed_encrypt(self, message: int) -> (int, float):
         """
         Encrypt a message using RSA public key. This is raw RSA without padding.
 
@@ -193,22 +193,26 @@ class VulnerableRSA(RSAInterface):
             message: Integer message to encrypt (must be < n)
 
         Returns:
-            Encrypted ciphertext as integer
+            A tuple with the encrypted ciphertext as integer, and the time spent as a float.
         """
         if message >= self.public_key.n:
             raise ValueError("Message must be smaller than modulus")
         if message < 0:
             raise ValueError("Message must be non-negative")
 
-        return RSAModularOperations.exponent(
+        start_time = time.perf_counter()
+        ciphertext = RSAModularOperations.exponent(
             base=message,
             exp=self.public_key.e,
             modulus=self.public_key.n,
             sleep_duration=self.sleep_duration
         )
+        timing = time.perf_counter() - start_time
+
+        return ciphertext, timing
 
 
-    def decrypt(self, ciphertext: int) -> int:
+    def timed_decrypt(self, ciphertext: int) -> (int, float):
         """
         Decrypt a ciphertext using RSA private key.
 
@@ -218,16 +222,19 @@ class VulnerableRSA(RSAInterface):
             ciphertext: Integer ciphertext to decrypt (must be < n)
 
         Returns:
-            Decrypted message as integer
+            A tuple with the decrypted message as integer, and the time spent as a float.
         """
         if ciphertext >= self.private_key.n:
             raise ValueError("Ciphertext must be smaller than modulus")
         if ciphertext < 0:
             raise ValueError("Ciphertext must be non-negative")
 
-        return RSAModularOperations.exponent(
+        start_time = time.perf_counter()
+        plaintext = RSAModularOperations.exponent(
             base=ciphertext,
             exp=self.private_key.d,
             modulus=self.private_key.n,
-            sleep_duration=self.sleep_duration
-        )
+            sleep_duration=self.sleep_duration)
+        timing = time.perf_counter() - start_time
+
+        return plaintext, timing

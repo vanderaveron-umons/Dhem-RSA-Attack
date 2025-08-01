@@ -1,5 +1,6 @@
 import base64
 import re
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -8,7 +9,7 @@ from pyasn1.error import PyAsn1Error
 from pyasn1.type import univ, namedtype
 
 
-class RSAInterface(ABC):
+class TimedRSAInterface(ABC):
     """
     Abstract base class defining the standard interface for RSA implementations.
     """
@@ -18,12 +19,31 @@ class RSAInterface(ABC):
         self.private_key = private_key
 
     @abstractmethod
-    def encrypt(self, message: int) -> int:
+    def timed_encrypt(self, message: int) -> (int, float):
+        """
+        Encrypts the given message using the RSA encryption algorithm.
+
+        Args:
+            message: the message to encrypt.
+
+        Returns:
+            An (int, float) tuple of the encrypted message and the time taken to perform the encryption.
+
+        """
         pass
 
-    @abstractmethod
-    def decrypt(self, ciphertext: int) -> int:
-        pass
+    def timed_decrypt(self, ciphertext: int) -> (int, float):
+        """
+        Decrypts the given message using the RSA encryption algorithm.
+
+        Args:
+            ciphertext: the ciphertext to decrypt.
+
+        Returns:
+             An (int, float) tuple of the decrypted message and the time taken to perform the decryption.
+
+        """
+
 
 # ========================== #
 # RSA structures and helpers #

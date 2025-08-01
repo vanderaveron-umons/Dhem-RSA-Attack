@@ -46,11 +46,9 @@ class AttackEnvironment:
         timing_samples = []
         for _ in range(self.num_traces):
             message = random.randrange(1, self.rsa_instance.public_key.n)
-            ciphertext = self.rsa_instance.encrypt(message)
+            ciphertext, _ = self.rsa_instance.timed_encrypt(message)
 
-            start_time = time.perf_counter()
-            self.rsa_instance.decrypt(ciphertext)
-            timing = time.perf_counter() - start_time
+            _, timing = self.rsa_instance.timed_decrypt(ciphertext)
 
             timing_samples.append(TimingSample(ciphertext, timing))
         return timing_samples

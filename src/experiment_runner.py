@@ -168,7 +168,12 @@ if __name__ == "__main__":
     TRACE_COUNTS = [10000, 20000, 40000, 80000, 160000]
     NUM_KEYS_PER_TRIAL = 10  # Use a smaller number for quicker tests
 
-
+    KEY_SIZES = [32, 62]
+    #SLEEP_DURATIONS = [0.0, 0.00001, 0.00005]  # 0µs, 10µs, 50µs
+    SLEEP_DURATIONS = [0, 0.00005]
+    #TRACE_COUNTS = [40000, 80000]
+    TRACE_COUNTS = [10000, 20000]
+    NUM_KEYS_PER_TRIAL = 1  # Use a smaller number for quicker tests
     GLOBAL_SEED = 42
     random.seed(GLOBAL_SEED)
 
