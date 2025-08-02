@@ -2,6 +2,8 @@
 # NEVER use it in production cryptographic applications.
 
 import time
+from typing import Tuple
+
 from rsa import TimedRSAInterface, RSAPublicKey, RSAPrivateKey
 
 
@@ -25,7 +27,7 @@ class RSAModularOperations:
 
             Args:
                 modulus: The modulus (must be odd for Montgomery arithmetic)
-                sleep_duration: Time to sleep on extra reduction (for side-channel demo)
+                sleep_duration: Time to sleep on extra reduction (for side-channel attack demo)
 
             Raises:
                 ValueError: If modulus is even (Montgomery requires odd modulus)
@@ -122,7 +124,7 @@ class RSAModularOperations:
             base: Base number
             exp: Exponent
             modulus: Modulus (must be odd)
-            sleep_duration: Sleep time for side-channel demonstration
+            sleep_duration: Sleep time for side-channel timing leakage amplification
 
         Returns:
             base^exp mod modulus
@@ -166,36 +168,37 @@ class VulnerableRSA(TimedRSAInterface):
     Vulnerable educational RSA implementation with timing side-channel vulnerabilities.
 
     This implementation demonstrates basic RSA operations without security
-    hardening. It includes optional timing delays to simulate side-channel
-    attacks during modular exponentiation.
-    """
-    def __init__(self, public_key: RSAPublicKey, private_key: RSAPrivateKey, sleep_duration: float = 0.0):
-        """
+    hardening. It includes optional timing delays to enhance side-channel timing
+    leakage during modular exponentiation.
 
-        Initialize RSA instance with given key pair.
+    The algorithm instance is stateless and can work with multiple different key pairs.
+    """
+
+
+    def __init__(self, sleep_duration: float = 0.0):
+        """
+        Initialize RSA algorithm implementation.
 
         Args:
-            public_key: RSA public key
-            private_key: RSA private key
-            sleep_duration: Time delay for side-channel demonstration
+            sleep_duration: Time delay for side-channel timing leakage amplification
         """
-        super().__init__(public_key, private_key)
         self.sleep_duration = sleep_duration
 
 
-    def timed_encrypt(self, message: int) -> (int, float):
+    def timed_encrypt(self, message: int, public_key: RSAPublicKey) -> Tuple[int, float]:
         """
         Encrypt a message using RSA public key. This is raw RSA without padding.
 
         Performs raw RSA encryption: ciphertext = message^e mod n
 
         Args:
-            message: Integer message to encrypt (must be < n)
+            message: Integer message to encrypt (must be < n, the RSA modulus)
+            public_key: RSA public key to use for encryption
 
         Returns:
-            A tuple with the encrypted ciphertext as integer, and the time spent as a float.
+            Tuple of (encrypted_ciphertext, encryption_time)
         """
-        if message >= self.public_key.n:
+        if message >= public_key.n:
             raise ValueError("Message must be smaller than modulus")
         if message < 0:
             raise ValueError("Message must be non-negative")
@@ -203,28 +206,28 @@ class VulnerableRSA(TimedRSAInterface):
         start_time = time.perf_counter()
         ciphertext = RSAModularOperations.exponent(
             base=message,
-            exp=self.public_key.e,
-            modulus=self.public_key.n,
+            exp=public_key.e,
+            modulus=public_key.n,
             sleep_duration=self.sleep_duration
         )
         timing = time.perf_counter() - start_time
 
         return ciphertext, timing
 
-
-    def timed_decrypt(self, ciphertext: int) -> (int, float):
+    def timed_decrypt(self, ciphertext: int, private_key: RSAPrivateKey) -> Tuple[int, float]:
         """
         Decrypt a ciphertext using RSA private key.
 
         Performs raw RSA decryption: message = ciphertext^d mod n
 
         Args:
-            ciphertext: Integer ciphertext to decrypt (must be < n)
+            ciphertext: Integer ciphertext to decrypt (must be < n, the RSA modulus)
+            private_key: RSA private key to use for decryption
 
         Returns:
-            A tuple with the decrypted message as integer, and the time spent as a float.
+            Tuple of (decrypted_message, decryption_time)
         """
-        if ciphertext >= self.private_key.n:
+        if ciphertext >= private_key.n:
             raise ValueError("Ciphertext must be smaller than modulus")
         if ciphertext < 0:
             raise ValueError("Ciphertext must be non-negative")
@@ -232,9 +235,79 @@ class VulnerableRSA(TimedRSAInterface):
         start_time = time.perf_counter()
         plaintext = RSAModularOperations.exponent(
             base=ciphertext,
-            exp=self.private_key.d,
-            modulus=self.private_key.n,
-            sleep_duration=self.sleep_duration)
+            exp=private_key.d,
+            modulus=private_key.n,
+            sleep_duration=self.sleep_duration
+        )
         timing = time.perf_counter() - start_time
 
         return plaintext, timing
+
+    def timed_sign(self, message: int, private_key: RSAPrivateKey) -> Tuple[int, float]:
+        """
+        Sign a message using RSA private key signing.
+
+        Performs raw RSA signing: signature = message^d mod n
+        Note: This is mathematically equivalent to decryption.
+
+        Args:
+            message: Integer message to sign (must be < n, the RSA modulus)
+            private_key: RSA private key to use for signing
+
+        Returns:
+            Tuple of (signature, signing_time)
+        """
+        if message >= private_key.n:
+            raise ValueError("Message must be smaller than modulus")
+        if message < 0:
+            raise ValueError("Message must be non-negative")
+
+        start_time = time.perf_counter()
+        signature = RSAModularOperations.exponent(
+            base=message,
+            exp=private_key.d,
+            modulus=private_key.n,
+            sleep_duration=self.sleep_duration
+        )
+        timing = time.perf_counter() - start_time
+
+        return signature, timing
+
+    def timed_verify(self, signature: int, message: int, public_key: RSAPublicKey) -> Tuple[bool, float]:
+        """
+        Verify a signature against a message using RSA public key verification.
+
+        Performs raw RSA verification: recovered_message = signature^e mod n
+        Then compares recovered_message with the original message.
+
+        Args:
+            signature: The signature to verify
+            message: The original message
+            public_key: RSA public key to use for verification
+
+        Returns:
+            Tuple of (is_signature_valid, verification_time)
+        """
+        if signature >= public_key.n:
+            raise ValueError("Signature must be smaller than modulus")
+
+        if signature < 0:
+            raise ValueError("Signature must be non-negative")
+
+        if message >= public_key.n:
+            raise ValueError("Message must be smaller than modulus")
+
+        if message < 0:
+            raise ValueError("Message must be non-negative")
+
+        start_time = time.perf_counter()
+        recovered_message = RSAModularOperations.exponent(
+            base=signature,
+            exp=public_key.e,
+            modulus=public_key.n,
+            sleep_duration=self.sleep_duration
+        )
+        timing = time.perf_counter() - start_time
+
+        is_valid = (recovered_message == message)
+        return is_valid, timing

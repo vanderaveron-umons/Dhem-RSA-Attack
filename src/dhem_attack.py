@@ -31,12 +31,8 @@ class AttackEnvironment:
         self.num_traces = num_traces
 
         # Generate RSA key pair using the new key generator
-        key_pair = RSAKeyGenerator.generate_keypair(key_length)
-        self.rsa_instance = VulnerableRSA(
-            public_key=key_pair.public_key,
-            private_key=key_pair.private_key,
-            sleep_duration=sleep_duration
-        )
+        self.key_pair = RSAKeyGenerator.generate_keypair(key_length)
+        self.rsa_instance = VulnerableRSA(sleep_duration=sleep_duration)
         self.timing_samples: List[TimingSample] = self._collect_timing_samples()
 
     def _collect_timing_samples(self) -> List[TimingSample]:
@@ -45,19 +41,18 @@ class AttackEnvironment:
         """
         timing_samples = []
         for _ in range(self.num_traces):
-            message = random.randrange(1, self.rsa_instance.public_key.n)
-            ciphertext, _ = self.rsa_instance.timed_encrypt(message)
+            message = random.randrange(1, self.key_pair.public_key.n)
+            ciphertext, _ = self.rsa_instance.timed_encrypt(message, self.key_pair.public_key)
 
-            _, timing = self.rsa_instance.timed_decrypt(ciphertext)
-
+            _, timing = self.rsa_instance.timed_decrypt(ciphertext, self.key_pair.private_key)
             timing_samples.append(TimingSample(ciphertext, timing))
         return timing_samples
 
     def get_public_key(self) -> RSAPublicKey:
-        return self.rsa_instance.public_key
+        return self.key_pair.public_key
 
     def get_private_key(self) -> RSAPrivateKey:
-        return self.rsa_instance.private_key
+        return self.key_pair.private_key
 
     def get_timing_samples(self) -> List[TimingSample]:
         return self.timing_samples

@@ -3,6 +3,7 @@ import re
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Tuple
 
 from pyasn1.codec.der import decoder, encoder
 from pyasn1.error import PyAsn1Error
@@ -11,38 +12,73 @@ from pyasn1.type import univ, namedtype
 
 class TimedRSAInterface(ABC):
     """
-    Abstract base class defining the standard interface for RSA implementations.
+    Abstract base class defining the standard interface for RSA algorithm implementations.
+
+    This interface separates the RSA algorithm implementation from specific key pairs,
+    allowing a single algorithm instance to work with multiple different keys.
+    All operations return both the result and the time taken to perform the operation.
     """
 
-    def __init__(self, public_key: 'RSAPublicKey', private_key: 'RSAPrivateKey'):
-        self.public_key = public_key
-        self.private_key = private_key
-
     @abstractmethod
-    def timed_encrypt(self, message: int) -> (int, float):
+    def timed_encrypt(self, message: int, public_key: 'RSAPublicKey') -> Tuple[int, float]:
         """
-        Encrypts the given message using the RSA encryption algorithm.
+        Encrypts the given message using RSA public key encryption.
 
         Args:
-            message: the message to encrypt.
+            message: The message to encrypt (must be < n, the RSA modulus)
+            public_key: RSA public key to use for encryption
 
         Returns:
-            An (int, float) tuple of the encrypted message and the time taken to perform the encryption.
-
+            Tuple of (encrypted_ciphertext, encryption_time)
         """
         pass
 
-    def timed_decrypt(self, ciphertext: int) -> (int, float):
+    @abstractmethod
+    def timed_decrypt(self, ciphertext: int, private_key: 'RSAPrivateKey') -> Tuple[int, float]:
         """
-        Decrypts the given message using the RSA encryption algorithm.
+        Decrypts the given ciphertext using RSA private key decryption.
 
         Args:
-            ciphertext: the ciphertext to decrypt.
+            ciphertext: The ciphertext to decrypt (must be < n, the RSA modulus)
+            private_key: RSA private key to use for decryption
 
         Returns:
-             An (int, float) tuple of the decrypted message and the time taken to perform the decryption.
-
+            Tuple of (decrypted_message, decryption_time)
         """
+        pass
+
+    @abstractmethod
+    def timed_sign(self, message: int, private_key: 'RSAPrivateKey') -> Tuple[int, float]:
+        """
+        Signs the given message using RSA private key signing.
+
+        Note: This is raw RSA signing without padding or hashing.
+
+        Args:
+            message: The message to sign (must be < n, the RSA modulus)
+            private_key: RSA private key to use for signing
+
+        Returns:
+            Tuple of (signature, signing_time)
+        """
+        pass
+
+    @abstractmethod
+    def timed_verify(self, signature: int, message: int, public_key: 'RSAPublicKey') -> Tuple[bool, float]:
+        """
+        Verifies the given signature against the message using RSA public key verification.
+
+        Note: This is raw RSA verification without padding or hashing.
+
+        Args:
+            signature: The signature to verify
+            message: The original message
+            public_key: RSA public key to use for verification
+
+        Returns:
+            Tuple of (is_valid, verification_time)
+        """
+        pass
 
 
 # ========================== #
